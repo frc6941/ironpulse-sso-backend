@@ -14,6 +14,10 @@ pub enum APIError {
 
 impl IntoResponse for APIError {
     fn into_response(self) -> Response {
-        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        match self {
+            APIError::SQL(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            APIError::Unauthorized => StatusCode::UNAUTHORIZED,
+            APIError::RedisError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }.into_response()
     }
 }
