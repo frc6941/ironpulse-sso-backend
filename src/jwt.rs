@@ -1,9 +1,26 @@
+use axum::extract::FromRef;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use crate::AppState;
 use crate::errors::APIError;
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LocalClaims {
+    pub sub: String,
+    pub exp: usize,
+    pub uid: String
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OAuthClaims {
+    sub: String,
+    exp: usize,
+    client_id: String
+}
+
+#[derive(Clone)]
 pub struct JwtHelper {
     encoding_key: EncodingKey,
     decoding_key: DecodingKey
@@ -33,5 +50,11 @@ impl JwtHelper {
             Ok(data) => Ok(data.claims),
             Err(_) => Err(APIError::Unauthorized)
         }
+    }
+}
+
+impl FromRef<AppState> for JwtHelper {
+    fn from_ref(state: &AppState) -> Self {
+        state.jwt_helper.clone()
     }
 }

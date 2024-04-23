@@ -1,10 +1,10 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AuthorizeParams {
-    response_type: String,
-    client_id: String,
-    redirect_url: Option<String>,
-    scope: Option<String>,
-    state: Option<String>
+    pub response_type: String,
+    pub client_id: String,
+    pub redirect_url: String,
+    pub scope: Option<String>,
+    pub state: Option<String>
 }
