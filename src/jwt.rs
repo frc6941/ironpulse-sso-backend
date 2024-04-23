@@ -1,19 +1,21 @@
 use axum::extract::FromRef;
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use crate::AppState;
 use crate::errors::APIError;
+use crate::errors::APIError::Unauthorized;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LocalClaims {
     pub sub: String,
     pub exp: usize,
     pub uid: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OAuthClaims {
     sub: String,
     exp: usize,
@@ -40,16 +42,14 @@ impl JwtHelper {
         }
     }
 
-    pub fn encode(&self, claims: &impl Deserialize) -> String {
+    pub fn encode(&self, claims: &impl Serialize) -> String {
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &self.encoding_key)
             .unwrap()
     }
 
-    pub fn decode<T: Deserialize>(&self, token: &String) -> Result<T, APIError> {
-        match jsonwebtoken::decode::<T>(token, &self.decoding_key, &Validation::new(Algorithm::EdDSA)) {
-            Ok(data) => Ok(data.claims),
-            Err(_) => Err(APIError::Unauthorized)
-        }
+    pub fn decode<T: DeserializeOwned>(&self, token: &String) -> Result<TokenData<T>, APIError> {
+        Ok(jsonwebtoken::decode::<T>(token, &self.decoding_key, &Validation::new(Algorithm::EdDSA))
+            .map_err(|_| Unauthorized)?)
     }
 }
 
