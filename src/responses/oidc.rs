@@ -15,3 +15,14 @@ impl IntoResponse for AuthorizeResponse {
         (StatusCode::OK, Json(self)).into_response()
     }
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LoginResponse {
+    pub token: String
+}
+
+impl IntoResponse for LoginResponse {
+    fn into_response(self) -> Response {
+        (StatusCode::OK, Json(self)).into_response()
+    }
+}

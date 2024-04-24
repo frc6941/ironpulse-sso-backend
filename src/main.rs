@@ -1,4 +1,5 @@
 #![feature(duration_constructors)]
+#![feature(unwrap_infallible)]
 
 mod requests;
 mod responses;
@@ -12,14 +13,16 @@ use std::env;
 use std::net::SocketAddr;
 use std::time::Duration;
 use axum::{Router, serve};
-use axum::routing::get;
+use axum::routing::{get, post};
 use bb8_redis::RedisConnectionManager;
 use dotenv::dotenv;
-use sqlx::{Pool, Postgres};
+use sqlx::{PgPool, Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
-use tracing::info;
+use tower_http::classify::ServerErrorsFailureClass;
+use tower_http::trace::TraceLayer;
+use tracing::{error, info, Span};
 use tracing_subscriber::EnvFilter;
-use crate::handlers::oidc::authorize;
+use crate::handlers::oidc::{authorize, login};
 use crate::jwt::JwtHelper;
 
 #[tokio::main]
@@ -56,6 +59,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/oauth2/authorize", get(authorize))
+        .route("/login", post(login))
+        .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
     let host = env::var("HOST").unwrap_or("127.0.0.1".into());
