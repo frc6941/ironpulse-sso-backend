@@ -26,3 +26,9 @@ impl IntoResponse for LoginResponse {
         (StatusCode::OK, Json(self)).into_response()
     }
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TokenResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+}

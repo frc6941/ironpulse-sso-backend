@@ -10,12 +10,12 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::errors::APIError;
-use crate::errors::APIError::{RedisError, Unauthorized};
-use crate::jwt::LocalClaims;
-use crate::query::client::is_client_exists;
+use crate::errors::APIError::{ClientNotExists, RedisError, Unauthorized};
+use crate::jwt::{LocalClaims, OAuthClaims};
+use crate::query::client::{get_client, is_client_exists};
 use crate::query::user::verify_password;
-use crate::requests::oidc::{AuthorizeParams, LoginRequest};
-use crate::responses::oidc::LoginResponse;
+use crate::requests::oidc::{AuthorizeParams, LoginRequest, TokenParams};
+use crate::responses::oidc::{LoginResponse, TokenResponse};
 
 pub async fn authorize(
     State(state): State<AppState>,
@@ -31,7 +31,7 @@ pub async fn authorize(
         Err(_) => return Ok(Redirect::to("/login"))
     };
     if !is_client_exists(&state.postgres_pool, &params.client_id).await {
-        return Err(APIError::ClientNotExists)
+        return Err(ClientNotExists)
     }
     let mut conn = state.redis_pool
         .get()
@@ -60,7 +60,7 @@ pub async fn authorize(
         Redirect::to(
             format!(
                 "{}?code={}{}",
-                params.redirect_url,
+                params.redirect_uri,
                 code,
                 state_param
             ).as_str()
@@ -69,9 +69,53 @@ pub async fn authorize(
 }
 
 pub async fn token(
+    State(state): State<AppState>,
+    cookie_jar: CookieJar,
+    WithRejection(Query(params), _): WithRejection<Query<TokenParams>, APIError>
+) -> Result<impl IntoResponse, APIError> {
+    if let None = get_client(&state.postgres_pool, &params.client_id, &params.client_secret).await {
+        return Err(ClientNotExists)
+    }
+    let token = match cookie_jar.get("ip_sso_token") {
+        None => return Ok(Redirect::to("/login")),
+        Some(token) => token
+    };
+    let token_data = match state.jwt_helper.decode::<LocalClaims>(&token.value().to_string()) {
+        Ok(data) => data,
+        Err(_) => return Ok(Redirect::to("/login"))
+    };
+    let mut conn = state.redis_pool
+        .get()
+        .await
+        .unwrap();
+    if !conn.exists(format!("{}:{}", params.client_id, token_data.claims.uid)) {
+        return Err(Unauthorized)
+    }
+    let code = conn.get(format!("{}:{}", params.client_id, token_data.claims.uid))
+        .await.unwrap();
+    if code != params.code {
+        return Err(Unauthorized)
+    }
+    let access_claims = OAuthClaims {
+        sub: token_data.claims.uid.to_string(),
+        exp: SystemTime::now().add(Duration::from_mins(5)).duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
+        client_id: params.client_id.clone(),
+    };
+    let access_token = state.jwt_helper.encode(&access_claims);
 
-) {
+    let refresh_claims = OAuthClaims {
+        sub: token_data.claims.uid,
+        exp: SystemTime::now().add(Duration::from_days(5)).duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
+        client_id: params.client_id,
+    };
+    let refresh_token = state.jwt_helper.encode(&refresh_claims);
 
+    Ok(
+        TokenResponse {
+            access_token,
+            refresh_token,
+        }
+    )
 }
 
 pub async fn login(

@@ -17,9 +17,9 @@ pub struct LocalClaims {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OAuthClaims {
-    sub: String,
-    exp: usize,
-    client_id: String
+    pub sub: String,
+    pub exp: usize,
+    pub client_id: String
 }
 
 #[derive(Clone)]

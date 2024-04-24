@@ -22,7 +22,7 @@ use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info, Span};
 use tracing_subscriber::EnvFilter;
-use crate::handlers::oidc::{authorize, login};
+use crate::handlers::oidc::{authorize, login, token};
 use crate::jwt::JwtHelper;
 
 #[tokio::main]
@@ -60,6 +60,7 @@ async fn main() {
     let app = Router::new()
         .route("/oauth2/authorize", get(authorize))
         .route("/login", post(login))
+        .route("/oauth2/token", post(token))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
