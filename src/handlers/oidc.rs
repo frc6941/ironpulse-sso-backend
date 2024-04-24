@@ -12,6 +12,7 @@ use crate::AppState;
 use crate::errors::APIError;
 use crate::errors::APIError::{RedisError, Unauthorized};
 use crate::jwt::LocalClaims;
+use crate::query::client::is_client_exists;
 use crate::query::user::verify_password;
 use crate::requests::oidc::{AuthorizeParams, LoginRequest};
 use crate::responses::oidc::LoginResponse;
@@ -29,6 +30,9 @@ pub async fn authorize(
         Ok(data) => data,
         Err(_) => return Ok(Redirect::to("/login"))
     };
+    if !is_client_exists(&state.postgres_pool, &params.client_id).await {
+        return Err(APIError::ClientNotExists)
+    }
     let mut conn = state.redis_pool
         .get()
         .await
@@ -64,7 +68,9 @@ pub async fn authorize(
     )
 }
 
-pub async fn token() {
+pub async fn token(
+
+) {
 
 }
 

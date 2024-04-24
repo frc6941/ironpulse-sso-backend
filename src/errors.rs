@@ -5,7 +5,6 @@ use axum::response::{IntoResponse, Response};
 use axum_extra::typed_header::TypedHeaderRejection;
 use serde_json::json;
 use thiserror::Error;
-use crate::errors::APIError::{NotSupportAuthenticationMethod, Unauthorized};
 
 #[derive(Debug, Error)]
 pub enum APIError {
@@ -21,17 +20,20 @@ pub enum APIError {
     QueryRejection(#[from] QueryRejection),
     #[error("Not support authentication method")]
     NotSupportAuthenticationMethod,
+    #[error("Client not exists")]
+    ClientNotExists
 }
 
 impl IntoResponse for APIError {
     fn into_response(self) -> Response {
         match self {
             APIError::SQL(e) => (StatusCode::INTERNAL_SERVER_ERROR, error_response(&e.to_string())),
-            APIError::Unauthorized => (StatusCode::UNAUTHORIZED, error_response("Unauthorized")),
+            APIError::Unauthorized => (StatusCode::UNAUTHORIZED, error_response(&*APIError::Unauthorized.to_string())),
             APIError::RedisError(e) => (StatusCode::INTERNAL_SERVER_ERROR, error_response(&e.to_string())),
             APIError::TypeHeaderRejection(e) => (StatusCode::BAD_REQUEST, error_response(&e.to_string())),
             APIError::QueryRejection(e) => (StatusCode::BAD_REQUEST, error_response(&e.to_string())),
-            APIError::NotSupportAuthenticationMethod => (StatusCode::BAD_REQUEST, error_response(&*NotSupportAuthenticationMethod.to_string()))
+            APIError::NotSupportAuthenticationMethod => (StatusCode::BAD_REQUEST, error_response(&*APIError::NotSupportAuthenticationMethod.to_string())),
+            APIError::ClientNotExists => (StatusCode::BAD_REQUEST, error_response(&*APIError::ClientNotExists.to_string())),
         }.into_response()
     }
 }
