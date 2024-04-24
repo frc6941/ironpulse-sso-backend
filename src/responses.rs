@@ -32,3 +32,9 @@ pub struct TokenResponse {
     pub access_token: String,
     pub refresh_token: String,
 }
+
+impl IntoResponse for TokenResponse {
+    fn into_response(self) -> Response {
+        (StatusCode::OK, Json(self)).into_response()
+    }
+}

@@ -14,8 +14,8 @@ use crate::errors::APIError::{ClientNotExists, RedisError, Unauthorized};
 use crate::jwt::{LocalClaims, OAuthClaims};
 use crate::query::client::{get_client, is_client_exists};
 use crate::query::user::verify_password;
-use crate::requests::oidc::{AuthorizeParams, LoginRequest, TokenParams};
-use crate::responses::oidc::{LoginResponse, TokenResponse};
+use crate::requests::{AuthorizeParams, LoginRequest, TokenParams};
+use crate::responses::{LoginResponse, TokenResponse};
 
 pub async fn authorize(
     State(state): State<AppState>,
@@ -77,21 +77,22 @@ pub async fn token(
         return Err(ClientNotExists)
     }
     let token = match cookie_jar.get("ip_sso_token") {
-        None => return Ok(Redirect::to("/login")),
+        None => return Ok(Redirect::to("/login").into_response()),
         Some(token) => token
     };
     let token_data = match state.jwt_helper.decode::<LocalClaims>(&token.value().to_string()) {
         Ok(data) => data,
-        Err(_) => return Ok(Redirect::to("/login"))
+        Err(_) => return Ok(Redirect::to("/login").into_response())
     };
     let mut conn = state.redis_pool
         .get()
         .await
         .unwrap();
-    if !conn.exists(format!("{}:{}", params.client_id, token_data.claims.uid)) {
+    if !conn.exists(format!("{}:{}", params.client_id, token_data.claims.uid))
+        .await.map_err(|e| RedisError(e))? {
         return Err(Unauthorized)
     }
-    let code = conn.get(format!("{}:{}", params.client_id, token_data.claims.uid))
+    let code: String = conn.get(format!("{}:{}", params.client_id, token_data.claims.uid))
         .await.unwrap();
     if code != params.code {
         return Err(Unauthorized)
@@ -114,7 +115,7 @@ pub async fn token(
         TokenResponse {
             access_token,
             refresh_token,
-        }
+        }.into_response()
     )
 }
 
@@ -132,7 +133,9 @@ pub async fn login(
         uid: user.uid.to_string(),
     };
 
-    Ok(LoginResponse {
-        token: state.jwt_helper.encode(&claims),
-    }.into_response())
+    Ok(
+        LoginResponse {
+            token: state.jwt_helper.encode(&claims),
+        }.into_response()
+    )
 }

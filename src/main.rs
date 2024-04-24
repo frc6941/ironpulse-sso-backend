@@ -1,13 +1,14 @@
 #![feature(duration_constructors)]
 #![feature(unwrap_infallible)]
 
-mod requests;
-mod responses;
-mod handlers;
+
 mod tables;
 mod query;
 mod jwt;
 mod errors;
+mod handlers;
+mod requests;
+mod responses;
 
 use std::env;
 use std::net::SocketAddr;
@@ -16,13 +17,12 @@ use axum::{Router, serve};
 use axum::routing::{get, post};
 use bb8_redis::RedisConnectionManager;
 use dotenv::dotenv;
-use sqlx::{PgPool, Pool, Postgres};
+use sqlx::{Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
-use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::trace::TraceLayer;
-use tracing::{error, info, Span};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
-use crate::handlers::oidc::{authorize, login, token};
+use crate::handlers::{authorize, login, token};
 use crate::jwt::JwtHelper;
 
 #[tokio::main]
