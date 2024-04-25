@@ -1,5 +1,4 @@
-use std::ops::Add;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use axum::extract::{Query, State};
 use axum::Json;
@@ -10,7 +9,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::errors::APIError;
-use crate::errors::APIError::{ClientNotExists, RedisError, Unauthorized};
+use crate::errors::APIError::{ClientNotExists, NotSupportAuthenticationMethod, RedisError, Unauthorized};
 use crate::jwt::{LocalClaims, OAuthClaims};
 use crate::query::client::{get_client, is_client_exists};
 use crate::query::user::verify_password;
@@ -22,11 +21,14 @@ pub async fn authorize(
     cookie_jar: CookieJar,
     WithRejection(Query(params), _): WithRejection<Query<AuthorizeParams>, APIError>
 ) -> Result<impl IntoResponse, APIError> {
+    if params.response_type != "code" {
+        return Err(NotSupportAuthenticationMethod)
+    }
     let token = match cookie_jar.get("ip_sso_token") {
         None => return Ok(Redirect::to("/login")),
-        Some(token) => token
+        Some(token) => token.value().to_string()
     };
-    let token_data = match state.jwt_helper.decode::<LocalClaims>(&token.value().to_string()) {
+    let token_data = match state.jwt_helper.decode::<LocalClaims>(&token) {
         Ok(data) => data,
         Err(_) => return Ok(Redirect::to("/login"))
     };
@@ -38,18 +40,12 @@ pub async fn authorize(
         .await
         .unwrap();
 
-    if !conn.exists(format!("{}:{}", params.client_id, token_data.claims.uid))
-        .await.map_err(|e| RedisError(e))? {
-        let code = Uuid::new_v4();
-        conn.set_ex(
-            format!("{}:{}", params.client_id, token_data.claims.uid),
-            code.to_string(),
-            Duration::from_mins(5).as_secs()
-        ).await.map_err(|e| RedisError(e))?;
-    }
-
-    let code: String = conn.get(format!("{}:{}", params.client_id, token_data.claims.uid))
-        .await.unwrap();
+    let code = Uuid::new_v4();
+    conn.set_ex(
+        code.to_string(),
+        format!("{}:{}", params.client_id, token_data.claims.sub),
+        Duration::from_mins(5).as_secs()
+    ).await.map_err(RedisError)?;
 
     let state_param = match params.state {
         None => "",
@@ -70,45 +66,31 @@ pub async fn authorize(
 
 pub async fn token(
     State(state): State<AppState>,
-    cookie_jar: CookieJar,
     WithRejection(Query(params), _): WithRejection<Query<TokenParams>, APIError>
 ) -> Result<impl IntoResponse, APIError> {
-    if let None = get_client(&state.postgres_pool, &params.client_id, &params.client_secret).await {
+    if get_client(
+        &state.postgres_pool,
+        &params.client_id,
+        &params.client_secret
+    ).await.is_none() {
         return Err(ClientNotExists)
     }
-    let token = match cookie_jar.get("ip_sso_token") {
-        None => return Ok(Redirect::to("/login").into_response()),
-        Some(token) => token
-    };
-    let token_data = match state.jwt_helper.decode::<LocalClaims>(&token.value().to_string()) {
-        Ok(data) => data,
-        Err(_) => return Ok(Redirect::to("/login").into_response())
-    };
     let mut conn = state.redis_pool
         .get()
         .await
         .unwrap();
-    if !conn.exists(format!("{}:{}", params.client_id, token_data.claims.uid))
-        .await.map_err(|e| RedisError(e))? {
+    if !conn.exists(params.code.clone()).await.map_err(RedisError)? {
         return Err(Unauthorized)
     }
-    let code: String = conn.get(format!("{}:{}", params.client_id, token_data.claims.uid))
-        .await.unwrap();
-    if code != params.code {
-        return Err(Unauthorized)
-    }
-    let access_claims = OAuthClaims {
-        sub: token_data.claims.uid.to_string(),
-        exp: SystemTime::now().add(Duration::from_mins(5)).duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
-        client_id: params.client_id.clone(),
-    };
+    let client_id_uid: String = conn.get(params.code).await.map_err(RedisError)?;
+    let mut client_id_uid = client_id_uid.split(':')
+        .map(|x| x.to_string());
+    let client_id = client_id_uid.next().unwrap();
+    let uid = client_id_uid.next().unwrap();
+    let access_claims = OAuthClaims::new(uid.clone(), client_id.clone());
     let access_token = state.jwt_helper.encode(&access_claims);
 
-    let refresh_claims = OAuthClaims {
-        sub: token_data.claims.uid,
-        exp: SystemTime::now().add(Duration::from_days(5)).duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
-        client_id: params.client_id,
-    };
+    let refresh_claims = OAuthClaims::new(uid, client_id);
     let refresh_token = state.jwt_helper.encode(&refresh_claims);
 
     Ok(
@@ -123,15 +105,15 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>
 ) -> Result<impl IntoResponse, APIError> {
-    let user = match verify_password(&state.postgres_pool, payload.username, payload.password).await {
+    let uid = match verify_password(
+        &state.postgres_pool,
+        payload.username,
+        payload.password
+    ).await {
         None => return Err(Unauthorized),
-        Some(user) => user
+        Some(user) => user.uid.to_string()
     };
-    let claims = LocalClaims {
-        sub: user.username,
-        exp: SystemTime::now().add(Duration::from_mins(10)).duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
-        uid: user.uid.to_string(),
-    };
+    let claims = LocalClaims::new(uid);
 
     Ok(
         LoginResponse {

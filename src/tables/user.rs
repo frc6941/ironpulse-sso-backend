@@ -1,5 +1,6 @@
 use uuid::Uuid;
 
+#[allow(dead_code)]
 #[derive(sqlx::FromRow)]
 pub struct User {
     pub id: i32,

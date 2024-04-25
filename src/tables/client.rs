@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[derive(sqlx::FromRow)]
 pub struct Client {
     pub id: i32,
