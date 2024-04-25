@@ -7,7 +7,7 @@ edition = "2021"
 dotenv = "0.15.0"
 tokio = { version = "1.37.0", features = ["full"] }
 axum = "0.7.5"
-#axum-macros = "0.4.1"
+# axum-macros = "0.4.1"
 axum-extra = { version = "0.9.3", features = ["typed-header", "cookie"] }
 jsonwebtoken = "9.3.0"
 ring = "0.17.8"
@@ -21,6 +21,6 @@ sqlx = { version = "0.7.4", features = ["runtime-tokio-native-tls", "postgres", 
 redis = "0.25.3"
 bb8 = "0.8.3"
 bb8-redis = "0.15.0"
-uuid = { version = "1.8.0", features = ["v4"] }
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
 sha256 = "1.5.0"
 tower-http = { version = "0.5.2", features = ["trace"] }

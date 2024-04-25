@@ -6,9 +6,9 @@ mod tables;
 mod query;
 mod jwt;
 mod errors;
-mod handlers;
 mod requests;
 mod responses;
+mod handlers;
 
 use std::env;
 use std::net::SocketAddr;
@@ -22,7 +22,8 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-use crate::handlers::{authorize, login, token};
+use crate::handlers::admin::{get_clients, get_user, get_users, register_client};
+use crate::handlers::oauth2::{authorize, login, token};
 use crate::jwt::JwtHelper;
 
 #[tokio::main]
@@ -61,6 +62,10 @@ async fn main() {
         .route("/oauth2/authorize", get(authorize))
         .route("/login", post(login))
         .route("/oauth2/token", post(token))
+        .route("/admin/client/:name", post(register_client))
+        .route("/admin/clients", get(get_clients))
+        .route("/admin/users", get(get_users))
+        .route("/admin/user/:uid", get(get_user))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
