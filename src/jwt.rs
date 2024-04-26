@@ -29,17 +29,19 @@ impl LocalClaims {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OAuthClaims {
     pub sub: String,
+    pub aud: String,
     pub exp: usize,
-    pub client_id: String
+    pub iss: String
 }
 
 impl OAuthClaims {
-    pub fn new(uid: String, client_id: String) -> OAuthClaims {
+    pub fn new(uid: String, client_id: String, issuer: String) -> OAuthClaims {
         OAuthClaims {
             sub: uid,
             exp: SystemTime::now().add(Duration::from_days(5))
                 .duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
-            client_id
+            aud: client_id,
+            iss:  issuer
         }
     }
 }

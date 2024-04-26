@@ -23,7 +23,7 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 use crate::handlers::admin::{get_clients, get_user, get_users, register_client};
-use crate::handlers::oauth2::{authorize, login, token};
+use crate::handlers::oauth2::{authorize, discovery, login, token};
 use crate::jwt::JwtHelper;
 
 #[tokio::main]
@@ -66,6 +66,7 @@ async fn main() {
         .route("/admin/clients", get(get_clients))
         .route("/admin/users", get(get_users))
         .route("/admin/user/:uid", get(get_user))
+        .route("/.well-known/openid-configuration", get(discovery))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 

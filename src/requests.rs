@@ -16,7 +16,7 @@ pub struct LoginRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct TokenParams {
+pub struct TokenRequest {
     pub client_id: String,
     pub client_secret: String,
     pub code: String,
