@@ -25,3 +25,4 @@ bb8-redis = "0.15.0"
 uuid = { version = "1.8.0", features = ["v4", "serde"] }
 sha256 = "1.5.0"
 tower-http = { version = "0.5.2", features = ["trace"] }
+toml = "0.8.12"

@@ -30,19 +30,23 @@ pub async fn authorize(
     if params.response_type != "code" {
         return Err(NotSupportAuthenticationMethod)
     }
+    let query_params = QueryParams {
+        redirect_uri: format!(
+            "{}/oauth2/authorize?redirect_uri={}&client_id=1&response_type=code&state={}",
+            state.config.root_url,
+            params.redirect_uri,
+            params.state.clone().unwrap_or(String::from(""))
+        ),
+    };
+    let query_params = serde_urlencoded::to_string(query_params).unwrap();
+    let login_url = format!("{}/?{}", state.config.frontend_endpoint, query_params);
     let token = match cookie_jar.get("ip_sso_token") {
-        None => return Ok(Redirect::to(
-            format!("http://localhost:3000/?{}", serde_urlencoded::to_string(QueryParams {
-                redirect_uri: format!("http://localhost:8080/oauth2/authorize?redirect_uri={}&client_id=1&response_type=code&state={}", params.redirect_uri, params.state.unwrap_or(String::from(""))),
-            }).unwrap()).as_str())),
+        None => return Ok(Redirect::to(login_url.as_str())),
         Some(token) => token.value().to_string()
     };
     let token_data = match state.jwt_helper.decode::<LocalClaims>(&token) {
         Ok(data) => data,
-        Err(_) => return Ok(Redirect::to(
-            format!("http://localhost:3000/?{}", serde_urlencoded::to_string(QueryParams {
-                redirect_uri: format!("http://localhost:8080/oauth2/authorize?redirect_uri={}&client_id=1&response_type=code&state={}", params.redirect_uri, params.state.unwrap_or(String::from(""))),
-            }).unwrap()).as_str()))
+        Err(_) => return Ok(Redirect::to(login_url.as_str()))
     };
     if !is_client_exists(&state.postgres_pool, &params.client_id).await {
         return Err(ClientNotExists)
@@ -56,7 +60,7 @@ pub async fn authorize(
     conn.set_ex(
         code.to_string(),
         format!("{}:{}", params.client_id, token_data.claims.sub),
-        Duration::from_mins(5).as_secs()
+        Duration::from_mins(state.config.oauth2.authorization_code_expire_mins).as_secs()
     ).await.map_err(RedisError)?;
 
     let state_param = match params.state {
@@ -99,10 +103,20 @@ pub async fn token(
         .map(|x| x.to_string());
     let client_id = client_id_uid.next().unwrap();
     let uid = client_id_uid.next().unwrap();
-    let access_claims = OAuthClaims::new(uid.clone(), client_id.clone(), "http://localhost:8080/".to_string());
+    let access_claims = OAuthClaims::new(
+        uid.clone(),
+        client_id.clone(),
+        state.config.oauth2.issuer.clone(),
+        Duration::from_mins(state.config.oauth2.access_token_expire_mins)
+    );
     let access_token = state.jwt_helper.encode(&access_claims);
 
-    let refresh_claims = OAuthClaims::new(uid, client_id, "http://localhost:8080/".to_string());
+    let refresh_claims = OAuthClaims::new(
+        uid,
+        client_id,
+        state.config.oauth2.issuer,
+        Duration::from_mins(state.config.oauth2.refresh_token_expire_mins)
+    );
     let refresh_token = state.jwt_helper.encode(&refresh_claims);
 
     Ok(
@@ -110,7 +124,7 @@ pub async fn token(
             access_token: access_token.clone(),
             refresh_token,
             id_token: access_token,
-            expires_in: 43200,
+            expires_in: state.config.oauth2.access_token_expire_mins,
             token_type: "bearer".to_string(),
         }.into_response()
     )
@@ -147,22 +161,23 @@ struct OpenIdConfiguration {
     grant_types_supported: Vec<String>
 }
 
-pub async fn discovery() -> impl IntoResponse {
+pub async fn discovery(
+    State(state): State<AppState>
+) -> impl IntoResponse {
     Json(
         OpenIdConfiguration {
-            issuer: "http://localhost:8080/".to_string(),
-            authorization_endpoint: "http://localhost:8080/oauth2/authorize".to_string(),
-            token_endpoint: "http://host.docker.internal:8080/oauth2/token".to_string(),
+            issuer: state.config.oauth2.issuer,
+            authorization_endpoint: format!("{}/oauth2/authorize", state.config.root_url),
+            // token_endpoint: format!("{}/oauth2/token", state.config.root_url),
+            token_endpoint: "http://host.docker.internal:8080/oauth2/token".into(),
             response_types_supported: vec![
-                "code".into(),
-                "id_token".into()
+                "code".into()
             ],
             scopes_supported: vec![
                 "openid".into(),
             ],
             grant_types_supported: vec![
-                "authorization_code".into(),
-                "refresh_token".into()
+                "authorization_code".into()
             ],
         }
     )

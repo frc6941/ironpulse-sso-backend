@@ -35,10 +35,10 @@ pub struct OAuthClaims {
 }
 
 impl OAuthClaims {
-    pub fn new(uid: String, client_id: String, issuer: String) -> OAuthClaims {
+    pub fn new(uid: String, client_id: String, issuer: String, exp: Duration) -> OAuthClaims {
         OAuthClaims {
             sub: uid,
-            exp: SystemTime::now().add(Duration::from_days(5))
+            exp: SystemTime::now().add(exp)
                 .duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
             aud: client_id,
             iss:  issuer

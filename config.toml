@@ -1,0 +1,11 @@
+host = "127.0.0.1"
+port = 8080
+root_url = "http://127.0.0.1:8080"
+frontend_endpoint = "http://127.0.0.1:3000"
+
+[oauth2]
+issuer = "IronPulse SSO"
+local_jwt_expire_mins = 3000
+access_token_expire_mins = 3000
+refresh_token_expire_mins = 30000
+authorization_code_expire_mins = 3000
